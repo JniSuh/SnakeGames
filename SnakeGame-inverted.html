@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+    <style>
+        .snakegame {
+            background-color: whitesmoke;
+            border: 2px black solid;
+            width: 400px;
+            height: 200px;
+        }
+        #gameover {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 300px;
+            height: 120px;
+            background-color:lightgray;
+            text-align: center;
+            border: 2px black dashed;
+            display: none;
+        }
+        #gameover>button {
+            height: 30px;
+            background-color:aliceblue;
+        }
+    </style>
+    <body>
+        <canvas id="canvas" class="snakegame"></canvas>
+        <div id="gameover">
+            <p>GAME OVER</p>
+            <br>
+            <button onclick="restartGame();">Play again</button>
+        </div>
+    </body>
+    <script>
+        /*
+        each part of the snake is moved individually via
+        a 'direction'<string> variable.
+        snakeInception() calls moveSnake() on each part.
+        */
+        const canvas = document.getElementById('canvas');
+        const brush = canvas.getContext('2d');
+
+        // ---------------CONFIG--------------- \\
+        const AppleSpawnLimit = 1; // how many apples can be present at a time
+        const RectSize = 10; // size of rectangles
+        const AppleHealAmount = 2; // eating apples reduces length by 2
+        const AppleTimerIncrease = 10; //(ms) how much eating apples restores timer interval
+        const DifInterval = 1000; //(ms) how often difficulty increases
+        const IntervalDeclineRate = 5; //(ms) how much interval value reduces each difficultyTimer cycle
+        const Interval = 200; //(ms) how often game window updates
+        // ------------------------------------  \\
+
+        let interval = Interval;
+        let turnInput = 'RIGHT';
+        let snake = []; // structure: [ {position:{x:<int>, y:<int>}, direction:<string>} ]
+        let apples = []; // structure: [ [<int>, <int>] ]
+        
+        addSnake(0, 80);
+        addApple(160, 120);
+
+        setTimeout(snakeTimer, interval);
+        let difficultyInterval = setInterval(difficultyTimer, DifInterval);
+        
+        document.body.addEventListener('keypress', (e) => {
+            switch (e.key) {
+                case 'w':    
+                    if (turnInput == 'LEFT' || turnInput == 'RIGHT')
+                        turnInput = 'UP';
+                    break;
+                case 'a':
+                    if (turnInput == 'UP' || turnInput == 'DOWN') 
+                        turnInput = 'LEFT';
+                    break;
+                    case 's':
+                    if (turnInput == 'RIGHT' || turnInput == 'LEFT')
+                        turnInput = 'DOWN';
+                    break;
+                case 'd':
+                    if (turnInput == 'UP' || turnInput == 'DOWN')
+                    turnInput = 'RIGHT';
+                break;
+            }
+        });
+        
+        function snakeTimer() {
+            brush.clearRect(0, 0, canvas.width, canvas.height); // clears canvas
+        
+            // draws apples
+            apples.forEach((apple) => {
+                drawRect(apple[0], apple[1], 'red');
+            });
+        
+            // moves snake parts
+            snakeInception(0, turnInput);
+        
+            if (interval != -1) // setting interval to -1 stops timer
+                setTimeout(snakeTimer, interval);
+        }
+
+        function difficultyTimer() {
+            // add new part at the end of the snake
+            let snakeTail = snake[snake.length-1];
+            let newX = snakeTail.position.x;
+            let newY = snakeTail.position.y;
+            switch(snakeTail.direction) {
+                case 'UP':
+                    newY += RectSize;
+                    break;
+                case 'DOWN':
+                    newY -= RectSize;
+                    break;
+                case 'RIGHT':
+                    newX -= RectSize;
+                    break;
+                case 'LEFT':
+                    newX += RectSize;
+                    break;
+            }
+            addSnake(newX, newY, snakeTail.direction);
+
+            interval -= IntervalDeclineRate; // reduces interval between window updates
+        }
+        
+        /*
+        goes through snake[] array and passes each
+        part's old direction<string> to the next part of
+        the snake and moves it
+        */
+        function snakeInception(index, direction) {
+            if (index < snake.length) {
+                moveSnake(snake[index], direction);
+                snakeInception(index+1, snake[index].direction);
+                snake[index].direction = direction;
+            }
+        }
+
+        // moves an individual part of the snake
+        function moveSnake(snakePart, direction) {
+            // checks if snake is inside canvas boundaries
+            let newX = -1;
+            let newY = -1;
+            switch (direction) {
+                case 'UP':
+                    if (snakePart.position.y > RectSize/2) {
+                        newY = snakePart.position.y - RectSize;
+                    }
+                    break;
+                case 'DOWN':
+                    if (snakePart.position.y < canvas.height - RectSize) {
+                        newY = snakePart.position.y + RectSize;
+                    }
+                    break;
+                case 'LEFT':
+                    if (snakePart.position.x > 0) {
+                        newX = snakePart.position.x - RectSize;
+                    }
+                    break;
+                case 'RIGHT':
+                    if (snakePart.position.x < canvas.width - RectSize) {
+                        newX = snakePart.position.x + RectSize;
+                    }
+                    break;
+            }
+
+            // if no walls were hit, game continues
+            if (newX != -1 || newY != -1) {
+                // updates new position
+                if (newX != -1) snakePart.position.x = newX;
+                if (newY != -1) snakePart.position.y = newY;
+
+                // draws snake part in new location
+                drawRect(newX == -1 ? snakePart.position.x : newX,
+                newY == -1 ? snakePart.position.y : newY, 'green');
+            }
+            else { // else game ends
+                interval = -1;
+            }
+
+            // // ends game if head hits body
+            snake.forEach(snakeCell => {
+                if (snakePart != snakeCell &&
+                snakePart.position.x == snakeCell.position.x &&
+                snakePart.position.y == snakeCell.position.y)
+                interval = -1;
+            });
+
+            if (interval == -1) {
+                // stuff to do when game ends
+                clearInterval(difficultyInterval);
+                document.getElementById('gameover').style.display = 'block'; // displays gameover window
+            }
+
+            // checks for eaten apples
+            apples.forEach(apple => {
+                if (areOverLapping(snakePart, apple)) { // if apple is eaten
+                    apples.splice(apples.indexOf(apple), 1); // removes apple
+
+                    // snake effects
+                    if (snake.length > AppleHealAmount) // prevents being reduced out of existence
+                        snake.splice(snake.length - AppleHealAmount, AppleHealAmount);
+                    else 
+                        snake.splice(1, snake.length-1); // reduces snake length to 1
+                    interval += AppleTimerIncrease;
+
+                    // adds apples at random location
+                    for (let x = apples.length; x < AppleSpawnLimit; x++) {
+                        addApple(Math.floor(Math.random() * canvas.width / 10) * 10, Math.floor(Math.random() * canvas.height / 10) * 10);
+                    }
+                }
+            });
+        }
+
+        function areOverLapping(snakePart, apple) {
+            if (snakePart.position.x == apple[0] && snakePart.position.y == apple[1])
+                return true;
+            return false;
+        }
+
+        function addApple(x, y) {
+            drawRect(x, y, 'red');
+            apples.push([x, y]);
+        }
+
+        function addSnake(x, y, direction='RIGHT') {
+            drawRect(x, y, 'green');
+            snake.push(new Snake({x:x, y:y}, direction));
+        }
+
+        function drawRect(x, y, color) {
+            brush.beginPath();
+            brush.rect(x, y, RectSize, RectSize);
+            brush.closePath();
+            brush.fillStyle = color;
+            brush.fill();
+        }
+        
+        function restartGame() {
+            brush.clearRect(0, 0, canvas.width, canvas.height); // clears canvas
+            document.getElementById('gameover').style.display = 'none'; // hides gameover window
+            turnInput = 'RIGHT';
+            interval = Interval;
+            snake = []; // erases old snake
+            addSnake(0, 80);
+            
+            setTimeout(snakeTimer, interval);
+            difficultyInterval = setInterval(difficultyTimer, DifInterval);
+        }
+        
+        function Snake(position, direction) {
+            this.position = position;
+            this.direction = direction;
+        }
+    </script>
+</html>

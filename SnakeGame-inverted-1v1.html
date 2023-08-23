@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+    <style>
+        .snakegame {
+            background-color: whitesmoke;
+            border: 2px black solid;
+            width: 400px;
+            height: 400px;
+        }
+        #gameover {
+            position: absolute;
+            top: 100px;
+            left: 650px;
+            width: 300px;
+            height: 160px;
+            background-color:lightgray;
+            text-align: center;
+            border: 2px black dashed;
+            display: none;
+        }
+        #gameover>button {
+            height: 30px;
+            background-color:aliceblue;
+        }
+        #player1,#player2 {
+            display: inline-block;
+            margin: auto 200px;
+        }
+        #player1>label, #player2>label {
+            font-size: x-large;
+            font-weight: bold;
+        }
+    </style>
+    <body>
+        <div id="player1">
+            <label>Player 1</label>
+            <br>
+            <canvas id="canvas1" class="snakegame"></canvas>
+        </div>
+        <div id="player2">
+            <label>Player 2</label>
+            <br>
+            <canvas id="canvas2" class="snakegame"></canvas>
+        </div>
+        <div id="gameover">
+            <p>GAME OVER</p>
+            <br>
+            <p id="winner"></p>
+            <button onclick="restartGame();">Play again</button>
+        </div>
+    </body>
+    <script>
+        /*
+        1v1 snake game.
+        player1 uses WASD and player2 arrow keys.
+
+        eating apples makes the other player's snake longer
+        and faster, while making own snake shorter and slower.
+        also automatically snakes get faster and longer.
+
+        each part of the snake is moved individually, with
+        the direction of each piece controlled by a 
+        direction<string> variable.
+        snakeInception() calls moveSnake() on each part.
+        */
+
+        const canvas1 = document.getElementById('canvas1');
+        const brush1 = canvas1.getContext('2d');
+
+        const canvas2 = document.getElementById('canvas2');
+        const brush2 = canvas2.getContext('2d');
+
+        // ---------------CONFIG--------------- \\
+        const AppleSpawnLimit = 1; // how many apples can be present at a time
+        const RectSize = 5; // size of rectangles
+        const AppleHealAmount = 2; // eating apples reduces length by n
+        const AppleTimerIncrease = 10; //(ms) how much eating apples restores timer interval
+        const IntervalDeclineRate = 5; //(ms) how much interval value reduces each difficultyTimer cycle
+        const Interval = 200; //(ms) how often game window updates at start
+        const DifInterval = 1000; //(ms) how often difficulty increases
+        // ------------------------------------  \\
+
+        let player1 = new Player(brush1);
+        let player2 = new Player(brush2);
+        
+        let difficultyInterval = setInterval(difficultyTimer, DifInterval);
+        
+        addSnake(0, 80, player1.brush, player1.snake);
+        addApple(170, 60, player1.brush, player1.apples);
+        setTimeout(() => {player1.timer(player1);}, player1.interval);
+
+        addSnake(0, 80, player2.brush, player2.snake);
+        addApple(170, 60, player2.brush, player2.apples);
+        setTimeout(() => {player2.timer(player2);}, player2.interval);
+        
+        // records change of directions for players
+        document.body.addEventListener('keydown', (e) => {
+            if ('wasd'.includes(e.key)) { // player1 keyset
+                switch (e.key) {
+                    case 'w':    
+                        if (player1.snake[0].direction == 'LEFT' || player1.snake[0].direction == 'RIGHT')
+                            player1.turnInput = 'UP';
+                        break;
+                    case 'a':
+                        if (player1.snake[0].direction == 'UP' || player1.snake[0].direction == 'DOWN') 
+                            player1.turnInput = 'LEFT';
+                        break;
+                        case 's':
+                        if (player1.snake[0].direction == 'RIGHT' || player1.snake[0].direction == 'LEFT')
+                            player1.turnInput = 'DOWN';
+                        break;
+                    case 'd':
+                        if (player1.snake[0].direction == 'UP' || player1.snake[0].direction == 'DOWN')
+                            player1.turnInput = 'RIGHT';
+                        break;
+                }
+            }
+            else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { // player2 keyset
+                switch (e.key) {
+                    case 'ArrowUp':
+                        if (player2.snake[0].direction == 'LEFT' || player2.snake[0].direction == 'RIGHT')
+                            player2.turnInput = 'UP';
+                        break;
+                    case 'ArrowLeft':
+                        if (player2.snake[0].direction == 'UP' || player2.snake[0].direction == 'DOWN') 
+                            player2.turnInput = 'LEFT';
+                        break;
+                    case 'ArrowDown':
+                        if (player2.snake[0].direction == 'RIGHT' || player2.snake[0].direction == 'LEFT')
+                            player2.turnInput = 'DOWN';
+                        break;
+                    case 'ArrowRight':
+                        if (player2.snake[0].direction == 'UP' || player2.snake[0].direction == 'DOWN')
+                            player2.turnInput = 'RIGHT';
+                        break;
+                }
+            }
+        });
+
+        // makes the game harder each cycle
+        function difficultyTimer() {
+            // does the same actions for each player
+            for (let player of [player1, player2]) {
+                // add new part at the end of the snake
+                addLength(player, 1);
+
+                // reduces interval between window updates
+                player.interval -= IntervalDeclineRate;
+            }
+        }
+        
+        /*
+        goes through player.snake[] array and passes each
+        part old direction<string> to the next part of
+        the snake and moves it
+        */
+        function snakeInception(player, index, direction) {
+            // moves the current part
+            moveSnake(player, player.snake[index], direction);
+            // calls itself and passes current part old direction down
+            if (index+1 < player.snake.length) snakeInception(player, index+1, player.snake[index].direction);
+            // updates current part old direction
+            player.snake[index].direction = direction;
+        }
+
+        // moves an individual part of the snake
+        function moveSnake(player, snakePart, direction) {
+            // checks if snake is inside canvas boundaries
+            let newX = -1;
+            let newY = -1;
+            switch (direction) {
+                case 'UP':
+                    if (snakePart.position.y > RectSize/2) {
+                        newY = snakePart.position.y - RectSize;
+                    }
+                    break;
+                case 'DOWN':
+                    if (snakePart.position.y < canvas1.height - RectSize) {
+                        newY = snakePart.position.y + RectSize;
+                    }
+                    break;
+                case 'LEFT':
+                    if (snakePart.position.x > 0) {
+                        newX = snakePart.position.x - RectSize * 2;
+                    }
+                    break;
+                case 'RIGHT':
+                    if (snakePart.position.x < canvas1.width - RectSize * 2) {
+                        newX = snakePart.position.x + RectSize * 2;
+                    }
+                    break;
+            }
+
+            // if no walls were hit, game continues
+            if (newX != -1 || newY != -1) {
+                // updates new position
+                if (newX != -1) snakePart.position.x = newX;
+                if (newY != -1) snakePart.position.y = newY;
+
+                // draws snake part in new location
+                drawRect(player.brush, newX == -1 ? snakePart.position.x : newX,
+                newY == -1 ? snakePart.position.y : newY, 'green');
+            }
+            else { // else game ends
+                player.turnInput = 'GAMEOVER';
+            }
+
+            // // ends game if head hits body
+            player.snake.forEach(snakeCell => {
+                if (snakePart != snakeCell &&
+                snakePart.position.x == snakeCell.position.x &&
+                snakePart.position.y == snakeCell.position.y)
+                player.turnInput = 'GAMEOVER';
+            });
+
+            if (player.turnInput == 'GAMEOVER' && player.interval != -1) {
+                player.interval = -1;
+
+                // stuff to do when game ends
+                console.log('snek ded');
+                document.getElementById('gameover').style.display = 'block'; // displays gameover window
+                // displays the winner
+                document.getElementById('winner').innerHTML = (player1.interval == -1 ? 'Player 2' : 'Player 1') + ' wins';
+                // stops timers
+                player1.interval = player2.interval = -1;
+                clearInterval(difficultyInterval);
+            }
+
+            // checks for eaten apples
+            player.apples.forEach((apple, index) => {
+                if (areOverLapping(snakePart, apple)) { // if apple is eaten
+                    player.apples.splice(index, 1); // removes apple
+
+                    // snake effects
+                    // reduces length of the snake that ate the apple
+                    if (player.snake.length > AppleHealAmount) { // prevents being reduced out of existence
+                        player.snake.splice(player.snake.length - AppleHealAmount, AppleHealAmount);
+                    }
+                    else {
+                        player.snake.splice(1, player.snake.length-1); // reduces snake length to 1
+                    }
+                    player.interval += AppleTimerIncrease;
+
+                    // increases length of another snake
+                    let enemySnake = player == player1 ? player2 : player1;
+                    addLength(enemySnake, AppleHealAmount);
+                    // increases speed of another snake
+                    enemySnake.interval -= IntervalDeclineRate;
+
+                    // adds apples at random location
+                    for (let x = player.apples.length; x < AppleSpawnLimit; x++) {
+                        addApple(
+                            Math.floor(Math.random() * canvas1.width / 10) * 10, 
+                            Math.floor(Math.random() * canvas1.height / 10) * 10, 
+                            player.brush, player.apples
+                            );
+                    }
+                }
+            });
+        }
+
+        // self-explanatory
+        function areOverLapping(snakePart, apple) {
+            if (snakePart.position.x == apple[0] && snakePart.position.y == apple[1])
+                return true;
+            return false;
+        }
+
+        /*
+        canvas width to height ratio is 2:1, so because height and
+        width are set the same value, shapes appear crammed together 
+        so horizontal values must be multiplied by 2 to compensate
+        */
+        function addLength(player, amount) {
+            for (let i = 0; i < amount; i++) {
+                let snakeTail = player.snake[player.snake.length-1];
+                let newX = snakeTail.position.x;
+                let newY = snakeTail.position.y;
+                switch(snakeTail.direction) {
+                    case 'UP':
+                        newY += RectSize;
+                        break;
+                    case 'DOWN':
+                        newY -= RectSize;
+                        break;
+                    case 'RIGHT':
+                        newX -= RectSize * 2;
+                        break;
+                    case 'LEFT':
+                        newX += RectSize * 2;
+                        break;
+                }
+                addSnake(newX, newY, player.brush, player.snake, snakeTail.direction);
+            }
+        }
+
+        function addApple(x, y, brush, appleArray) {
+            drawRect(brush, x, y, 'red');
+            appleArray.push([x, y]);
+        }
+
+        function addSnake(x, y, brush, snakeArray, direction='RIGHT') {
+            drawRect(brush, x, y, 'green');
+            snakeArray.push(new Snake({x:x, y:y}, direction));
+        }
+
+        // draws... a rectangle?
+        function drawRect(brush, x, y, color) {
+            brush.beginPath();
+            brush.rect(x, y, RectSize * 2, RectSize);
+            brush.closePath();
+            brush.fillStyle = color;
+            brush.fill();
+        }
+        
+        // resets values and starts timers again
+        function restartGame() {
+            document.getElementById('gameover').style.display = 'none'; // hides gameover window
+
+            // does the same actions on both players
+            for (let player of [player1, player2]) {
+                player.brush.clearRect(0, 0, canvas1.width, canvas1.height); // clears canvas
+                player.turnInput = 'RIGHT';
+                player.interval = Interval;
+                // erases old snake
+                player.snake = [];
+                addSnake(0, 80, player.brush, player.snake);
+
+                setTimeout(() => {player.timer(player);}, player.interval);
+            }
+
+            difficultyInterval = setInterval(difficultyTimer, DifInterval);
+        }
+        
+        function Snake(position, direction) {
+            this.position = position;
+            this.direction = direction;
+        }
+
+        function Player(brush) {
+            this.snake = [];
+            this.apples = [];
+            this.brush = brush;
+            this.turnInput = 'RIGHT';
+            this.interval = Interval;
+            this.timer = function(player) {
+                this.brush.clearRect(0, 0, canvas1.width, canvas1.height); // clears canvas
+        
+                // draws apples
+                this.apples.forEach((apple) => {
+                    drawRect(this.brush, apple[0], apple[1], 'red');
+                });
+            
+                // moves snake parts
+                snakeInception(player, 0, this.turnInput);
+                if (this.interval != -1) // setting interval to -1 stops timer
+                    setTimeout(() => {this.timer(player);}, this.interval);
+            };
+        }
+    </script>
+</html>

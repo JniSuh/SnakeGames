@@ -37,26 +37,33 @@
 
         // ---------------CONFIG--------------- \\
         const AppleSpawnLimit = 3; // how many apples can be present at a time
-        const RectSize = 5; // size of rectangles
+        const RectSize = 10; // size of rectangles
         const AppleHealAmount = 2; // eating apples reduces length by 2
         const AppleTimerIncrease = 10; //(ms) how much eating apples restores timer interval
         const DifInterval = 500; //(ms) how often difficulty increases
         const IntervalDeclineRate = 5; //(ms) how much interval value reduces each difficultyTimer cycle
-        const Interval = 0; //(ms) how often game window updates
+        const Interval = 50; //(ms) how often game window updates
         // ------------------------------------  \\
+        // Canvas : 300x300
 
         let interval = Interval;
         let turnInput = 'RIGHT';
         let snake = []; // structure: [ {position:{x:<int>, y:<int>}, direction:<string>} ]
         let apples = []; // structure: [ [<int>, <int>] ]
         
-        addSnake(0, 80);
-        addApple(160, 120);
-        addApple(200, 140);
-        addApple(100, 5);
+        canvas.width = 300;
+        canvas.height = 300;
+
+        addSnake(250,80);
+        
+        addApple(150, 0);
+        // addApple(20, 150);
+        // addApple(50, 0);
 
         console.log(apples);
         console.log('closest apple: ' + getClosestApple());
+
+        let getRandomPos = () => {return Math.floor(Math.random() * canvas.width / 10) * 10;};
 
         setTimeout(snakeTimer, interval);
         // let difficultyInterval = setInterval(difficultyTimer, DifInterval);
@@ -81,21 +88,66 @@
         let pathToApple = [];
         function calculatePath() {
             let closestApple = getClosestApple();
-            if (snake[0].position.y > closestApple[1]) {
-                turnInput = 'UP';
+            if (Math.abs(snake[0].position.y - closestApple[1]) >= Math.abs(snake[0].position.x - closestApple[0])) {
+
+                if (snake[0].position.y > closestApple[1]) {
+                    if (snake[0].direction == 'RIGHT' || snake[0].direction == 'LEFT' || snake[0].direction == 'UP')
+                    turnInput = 'UP';
+                    else {
+                        if (isOutOfBound(snake[0], 'LEFT')) turnInput = 'RIGHT';
+                        else turnInput = 'LEFT';
+                    }
+                }
+                else if (snake[0].position.y < closestApple[1]) {
+                    if (snake[0].direction == 'RIGHT' || snake[0].direction == 'LEFT' || snake[0].direction == 'DOWN')
+                    turnInput = 'DOWN';
+                    else {
+                        if (isOutOfBound(snake[0], 'LEFT')) turnInput = 'RIGHT';
+                        else turnInput = 'LEFT';
+                    }
+                }
             }
-            else if (snake[0].position.y < closestApple[1]) {
-                turnInput = 'DOWN';
-            }
-            else if (snake[0].position.x < closestApple[0]) {
-                turnInput = 'RIGHT';
-            }
-            else if (snake[0].position.x > closestApple[0]) {
-                turnInput = 'LEFT';
+            else {
+
+                if (snake[0].position.x < closestApple[0]) {
+                    if (snake[0].direction == 'UP' || snake[0].direction == 'DOWN' || snake[0].direction == 'RIGHT')
+                    turnInput = 'RIGHT';
+                    else {
+                        if (isOutOfBound(snake[0], 'UP')) turnInput = 'DOWN'; //////
+                        else turnInput = 'UP';
+                    }
+                }
+                else if (snake[0].position.x > closestApple[0]) {
+                    if (snake[0].direction == 'UP' || snake[0].direction == 'DOWN' || snake[0].direction == 'LEFT')
+                    turnInput = 'LEFT';
+                    else {
+                        if (isOutOfBound(snake[0], 'UP')) turnInput = 'DOWN';
+                        else turnInput = 'UP';
+                    }
+                }
             }
         }
 
+        function isOutOfBound(head, direction) {
+            switch(direction) {
+                case 'UP':
+                    if (head.position.y - RectSize < 0)
+                    return true;
+                case 'DOWN': /////
+                    if (head.position.y + RectSize >= canvas.height)
+                    return true;
+                case 'LEFT':
+                    if (head.position.x - RectSize > 0)
+                    return true;
+                case 'RIGHT':
+                    if (head.position.x + RectSize >= canvas.width)
+                    return true;
+            }
+            return false;
+        }
+
         function avoidCollision(head, direction) {
+            let collisionIncoming = false;
             snake.forEach(cell => {
                 if (cell != head) {
                     
@@ -132,15 +184,15 @@
                     newY -= RectSize;
                     break;
                 case 'RIGHT':
-                    newX -= RectSize * 2;
+                    newX -= RectSize;
                     break;
                 case 'LEFT':
-                    newX += RectSize * 2;
+                    newX += RectSize;
                     break;
             }
             addSnake(newX, newY, snakeTail.direction);
 
-            if (interval > 10) interval -= IntervalDeclineRate; // reduces interval between window updates
+            // if (interval > 10) interval -= IntervalDeclineRate; // reduces interval between window updates
         }
         
         /*
@@ -174,12 +226,12 @@
                     break;
                 case 'LEFT':
                     if (snakePart.position.x > 0) {
-                        newX = snakePart.position.x - RectSize * 2;
+                        newX = snakePart.position.x - RectSize;
                     }
                     break;
                 case 'RIGHT':
-                    if (snakePart.position.x < canvas.width - RectSize * 2) {
-                        newX = snakePart.position.x + RectSize * 2;
+                    if (snakePart.position.x < canvas.width - RectSize) {
+                        newX = snakePart.position.x + RectSize;
                     }
                     break;
             }
@@ -192,7 +244,8 @@
 
                 // draws snake part in new location
                 drawRect(newX == -1 ? snakePart.position.x : newX,
-                newY == -1 ? snakePart.position.y : newY, 'green');
+                newY == -1 ? snakePart.position.y : newY, 
+                snake[0] == snakePart ?  'blue' : 'green');
             }
             else { // else game ends
                 interval = -1;
@@ -208,7 +261,7 @@
 
             if (interval == -1) {
                 // stuff to do when game ends
-                clearInterval(difficultyInterval);
+                // clearInterval(difficultyInterval);
                 document.getElementById('gameover').style.display = 'block'; // displays gameover window
             }
 
@@ -225,9 +278,18 @@
                     // interval += AppleTimerIncrease;
 
                     // adds apples at random location
-                    for (let x = apples.length; x < AppleSpawnLimit; x++) {
-                        addApple(Math.floor(Math.random() * canvas.width / 10) * 10, Math.floor(Math.random() * canvas.height / 10) * 10);
-                    }
+                        let nX = Math.floor(Math.random() * canvas.width / 10) * 10;
+                        let nY = Math.floor(Math.random() * canvas.width / 10) * 10;
+
+                        while (nX == snake[0].position.x && nY == snake[0].position.y) {
+                            nX = Math.floor(Math.random() * canvas.width / 10) * 10;
+                            nY = Math.floor(Math.random() * canvas.width / 10) * 10;
+                        }
+                        // let nX = 270;
+                        // let nY = 0;
+
+                        console.log('apple: '+nX+', '+nY+' | snake: '+snake[0].position.x+', '+snake[0].position.y);
+                        addApple(nX, nY);
                 }
             });
         }
@@ -250,7 +312,7 @@
 
         function drawRect(x, y, color) {
             brush.beginPath();
-            brush.rect(x, y, RectSize * 2, RectSize);
+            brush.rect(x, y, RectSize, RectSize);
             brush.closePath();
             brush.fillStyle = color;
             brush.fill();
